@@ -9,6 +9,14 @@ from dictionary import BilingualDictionary, MonolingualDictionary
 
 
 class SearchEngine:
+    def index_documents(self, documents):
+        pass
+
+    def query_index(self, query, n_results=5):
+        pass
+
+
+class EmbeddingSearchEngine(SearchEngine):
     def __init__(self, dictionary):
         self.dictionary = dictionary
         self.index = AnnoyIndex(dictionary.vector_dimensionality, metric='angular')
@@ -33,7 +41,7 @@ class SearchEngine:
         return np.sum(self.dictionary.word_vectors(tokens=tokens), axis=0)
 
 
-class BilingualSearchEngine(SearchEngine):
+class BilingualEmbeddingSearchEngine(EmbeddingSearchEngine):
     def __init__(self, dictionary):
         super().__init__(dictionary=dictionary)
 
@@ -51,10 +59,10 @@ if __name__ == "__main__":
 
     if args.tgt_emb_file is None:  # monolingual
         mono_dict = MonolingualDictionary(args.src_emb_file)
-        search_engine = SearchEngine(dictionary=mono_dict)
+        search_engine = EmbeddingSearchEngine(dictionary=mono_dict)
     else:  # bilingual
         bi_dict = BilingualDictionary(args.src_emb_file, args.tgt_emb_file)
-        search_engine = BilingualSearchEngine(dictionary=bi_dict)
+        search_engine = BilingualEmbeddingSearchEngine(dictionary=bi_dict)
 
     print('Type each sentence to index, followed by enter. When done, hit enter twice.')
     sentences = []
