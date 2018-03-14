@@ -19,12 +19,15 @@ class Dictionary:
 
 class MonolingualDictionary(Dictionary):
     def __init__(self, emb_file, language=None):
-        self.emb = EuclideanKeyedVectors.load_word2vec_format(emb_file, binary=False)
+        self.emb = EuclideanKeyedVectors.load_word2vec_format(emb_file, binary=os.path.splitext(emb_file)[1] == '.bin')
         self.vector_dimensionality = self.emb.vector_size
         self.language = language if language is not None else os.path.basename(emb_file).split('.')[0]
 
+    def __contains__(self, token):
+        return token in self.emb
+
     def safe_word_vector(self, token):
-        if not self.emb.__contains__(token):
+        if token not in self.emb:
             return np.zeros(shape=(self.vector_dimensionality,))
         return self.emb.word_vec(token)
 
