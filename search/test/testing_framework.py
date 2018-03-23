@@ -1,10 +1,12 @@
+import glob
 import os
 from collections import namedtuple
 
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from baseline import CosineSimilaritySearchEngine
-from dictionary import MonolingualDictionary
+from dictionary import MonolingualDictionary, SubwordDictionary
 from search_engine import EmbeddingSearchEngine
 from .run_tests import query_result, f1_score
 
@@ -30,6 +32,9 @@ def vary_embeddings(test):
         def df_value(value):
             return value if not parsed_args.column else value[parsed_args.column]
 
+        def dictionary(embed_path):
+            return SubwordDictionary(embed_path) if parsed_args.subword else MonolingualDictionary(embed_path)
+
         # use base name as prettier format, None -> []
         non_domain_embed = base_name_map(parsed_args.embed)
         domain_embed = base_name_map(parsed_args.domain_embed)
@@ -38,10 +43,11 @@ def vary_embeddings(test):
         for path in non_domain_embed.values():
             if not os.path.exists(path):
                 raise FileNotFoundError(path)
-        for path in domain_embed.values():
-            for collection in collections:
-                if not os.path.exists(path.format(collection.name)):
-                    raise FileNotFoundError(path.format(collection.name))
+        if not parsed_args.hyperparams:
+            for path in domain_embed.values():
+                for collection in collections:
+                    if not os.path.exists(path.format(collection.name)):
+                        raise FileNotFoundError(path.format(collection.name))
 
         baseline = test.non_embed and parsed_args.baseline
         embed_names = [test.non_embed] if baseline else [] + list(non_domain_embed.keys()) + list(domain_embed.keys())
@@ -51,13 +57,13 @@ def vary_embeddings(test):
         else:
             assert parsed_args.column in test.columns
             index = [c.name for c in collections]
-            columns = embed_names
+            columns = embed_names if not parsed_args.hyperparams else []
         df = pd.DataFrame(index=index, columns=columns)
 
         # embeddings are slow to load and take up a lot of memory. load them only once for all collections, and release
         # them quickly.
         for embed_name, path in non_domain_embed.items():
-            embed = MonolingualDictionary(path)
+            embed = dictionary(path)
             for collection in collections:
                 df.loc[collection.name, embed_name] = df_value(test.f(collection, embed))
 
@@ -65,9 +71,24 @@ def vary_embeddings(test):
             if baseline:
                 df.loc[collection.name, test.non_embed] = df_value(test.f(collection, None))
             for embed_name, path in domain_embed.items():
-                embed = MonolingualDictionary(path.format(collection.name))
-                df.loc[collection.name, embed_name] = df_value(test.f(collection, embed))
-
+                if not parsed_args.hyperparams:
+                    embed = dictionary(path.format(collection.name))
+                    df.loc[collection.name, embed_name] = df_value(test.f(collection, embed))
+                else:
+                    globbed_path = path.format(collection.name)
+                    embeds = glob.glob(globbed_path)
+                    for embed_path in embeds:
+                        embed = dictionary(embed_path)
+                        star = globbed_path.index('*')
+                        column = embed_path[star:star-len(globbed_path)+1]
+                        df.loc[collection.name, column] = df_value(test.f(collection, embed))
+        if parsed_args.hyperparams:
+            cols = df.columns.tolist()
+            try:
+                cols = list(map(str, sorted(map(int, cols))))
+            except ValueError:
+                cols = sorted(cols)
+            df = df[cols]
         return df
 
     return inner
@@ -98,3 +119,24 @@ def search_test_f(collection, search_engine):
 
 search_test = EmbeddingsTest(f=search_test_f, columns=search_test_columns, non_embed='baseline')
 
+
+'''
+Print result
+'''
+
+
+def print_table(data, args):
+    pd.set_option('precision', args.precision)
+    if args.latex:
+        print(data.to_latex())
+    else:
+        print(data)
+
+
+def display_chart(data, args):
+    for row in data.index:
+        plt.plot(data.loc[row], label=row)
+    plt.legend()
+    plt.xlabel(args.x_axis)
+    plt.ylabel(args.column)
+    plt.show()

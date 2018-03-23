@@ -1,10 +1,8 @@
 import argparse
 
-import pandas as pd
-
 from .df_tests import vary_df, add_df_parser_options
 from .oov_tests import oov_test
-from .testing_framework import vary_embeddings, search_test, embed_to_engine
+from .testing_framework import vary_embeddings, search_test, embed_to_engine, print_table, display_chart
 from ir_data_reader import readers, read_collection
 
 
@@ -12,12 +10,16 @@ parser = argparse.ArgumentParser(description='IR data reader.')
 subparsers = parser.add_subparsers()
 
 parent_parser = argparse.ArgumentParser(add_help=False)
-parent_parser.add_argument('ir_dir', type=str, help='Directory with IR files', nargs='?')
+parent_parser.add_argument('ir_dir', type=str, help='Directory with IR files')
 parent_parser.add_argument('-t', '--types', choices=list(readers.keys()) + ['all'], nargs='*', default='all')
 parent_parser.add_argument('-b', '--baseline', action='store_true')
+parent_parser.add_argument('-s', '--subword', action='store_true')
+parent_parser.add_argument('-hp', '--hyperparams', action='store_true')
 parent_parser.add_argument('-c', '--column', type=str, nargs='?')
 parent_parser.add_argument('-l', '--latex', action='store_true')
 parent_parser.add_argument('-p', '--precision', type=int, default=4)
+parent_parser.add_argument('-x', '--x_axis', type=str, default='')
+parent_parser.add_argument('-q', '--query_id', type=str, nargs='*')
 
 parent_parser.add_argument('-d', '--domain_embed', type=str, nargs='*',
                            help='Embedding format for domain-specific embedding')
@@ -42,9 +44,5 @@ if args.types == 'all':
 
 result = args.func([read_collection(base_dir=args.ir_dir, collection_name=name) for name in args.types], args)
 
-pd.set_option('precision', args.precision)
-if args.latex:
-    print(result.to_latex())
-else:
-    print(result)
-
+print_table(result, args)
+# display_chart(result, args)

@@ -4,6 +4,7 @@ import os
 
 import numpy as np
 from gensim.models.keyedvectors import EuclideanKeyedVectors
+import fastText
 
 
 class Dictionary:
@@ -15,6 +16,25 @@ class Dictionary:
 
     def synonyms(self, src_word, topn=1):
         pass
+
+
+class SubwordDictionary(Dictionary):
+    def __init__(self, emb_file, language=None):
+        self.emb = fastText.load_model(path=emb_file)
+        self.vector_dimensionality = len(self.emb.get_word_vector(''))
+        self.language = language if language is not None else os.path.basename(emb_file).split('.')[0]
+
+    def __contains__(self, token):
+        return self.emb.get_word_id(token) >= 0
+
+    def safe_word_vector(self, token):
+        return self.emb.get_word_vector(token)
+
+    def word_vectors(self, tokens):
+        return [self.safe_word_vector(token) for token in tokens]
+
+    def synonyms(self, key, topn=1, vector=False):
+        raise NotImplementedError()
 
 
 class MonolingualDictionary(Dictionary):
@@ -39,10 +59,11 @@ class MonolingualDictionary(Dictionary):
 
 
 class BilingualDictionary(Dictionary):
-    def __init__(self, src_emb_file, tgt_emb_file):
+    def __init__(self, src_emb_file, tgt_emb_file, subword=False):
         assert os.path.exists(src_emb_file) and os.path.exists(tgt_emb_file)  # slow to open so don't want to waste time
-        self.src_emb = MonolingualDictionary(emb_file=src_emb_file)
-        self.tgt_emb = MonolingualDictionary(emb_file=tgt_emb_file)
+        cls = MonolingualDictionary if not subword else SubwordDictionary
+        self.src_emb = cls(emb_file=src_emb_file)
+        self.tgt_emb = cls(emb_file=tgt_emb_file)
         assert self.src_emb.vector_dimensionality == self.tgt_emb.vector_dimensionality
         self.vector_dimensionality = self.src_emb.vector_dimensionality
 
