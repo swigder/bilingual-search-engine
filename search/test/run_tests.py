@@ -11,6 +11,18 @@ from search_engine import EmbeddingSearchEngine
 PrecisionRecall = namedtuple('PrecisionRecall', ['precision', 'recall'])
 
 
+def average_precision(expected, actual):
+    if len(expected) == 0:
+        return 0
+    running_total = 0
+    running_correct = 0
+    for rank, result in enumerate(actual, start=1):
+        if result in expected:
+            running_correct += 1
+            running_total += running_correct / rank
+    return running_total / len(expected)
+
+
 def f1_score(precision, recall):
     if precision == 0 or recall == 0:
         return 0
@@ -20,8 +32,9 @@ def f1_score(precision, recall):
 def precision_recall(expected, actual):
     true_positives = sum([1 for item in expected if item in actual])
     if true_positives is 0:
-        return 0, 0
-    return true_positives / len(actual), true_positives / len(expected)
+        return PrecisionRecall(precision=0, recall=0)
+    return PrecisionRecall(precision=true_positives / len(actual),
+                           recall=true_positives / len(expected))
 
 
 def read_data(data_dir, doc_file, query_file, relevance_file, reader):
@@ -30,7 +43,7 @@ def read_data(data_dir, doc_file, query_file, relevance_file, reader):
     return reader.read(f(doc_file), f(query_file), f(relevance_file))
 
 
-def query_result(search_engine, i, query, expected, documents, n=5, verbose=False):
+def query_result(search_engine, i, query, expected, documents, n=5, verbose=False, metric=precision_recall):
     results = search_engine.query_index(query, n_results=n)
     results_i = []
     if verbose:
@@ -43,8 +56,7 @@ def query_result(search_engine, i, query, expected, documents, n=5, verbose=Fals
             print(result_i, distance, result[:100])
             if result_i in expected:
                 print('Correct!')
-    precision, recall = precision_recall(expected=expected, actual=results_i)
-    return PrecisionRecall(precision, recall)
+    return metric(expected=expected, actual=results_i)
 
 
 def compare_search_engines(search_engine, baseline, collection, n=5, print_details=True):
@@ -114,17 +126,17 @@ if __name__ == "__main__":
                         help='Embedding format for domain-specific embedding')
     parser.add_argument('-e', '--embed', type=str, nargs='*',
                         help='Embedding location for general purpose embedding')
-    parser.add_argument('-t', '--types', choices=list(readers.keys()) + ['all'], default='all')
+    parser.add_argument('-c', '--collections', choices=list(readers.keys()) + ['all'], default='all')
     parser.add_argument('-n', '--number_results', type=int, default=5)
     parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument('-b', '--baseline', action='store_true')
-    parser.add_argument('-c', '--compare', action='store_true')
+    parser.add_argument('-cp', '--compare', action='store_true')
     parser.add_argument('-d', '--df_file', type=str, help='File with precomputed df', default=None)
 
     args = parser.parse_args()
 
-    if args.types == 'all':
-        args.types = list(readers.keys())
+    if args.collections == 'all':
+        args.collections = list(readers.keys())
 
     if not args.ir_dir:
         args.ir_dir = '/Users/xx/Documents/school/kth/thesis/ir-datasets/'

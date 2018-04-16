@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 
-fasttext=/Users/xx/thesis/fastText/fasttext
-training_dir=/Users/xx/thesis/embed-train
-output_dir=/Users/xx/thesis/embed
+thesis_home=/Users/xx/thesis
+fasttext="${thesis_home}/fastText/fasttext"
+training_dir="${thesis_home}/embed-train"
+embed_dir="${thesis_home}/embed"
+output_dir="${embed_dir}"
 
 collection=''
 pretrained=''
-subword=3
-epoch=40
-window=5
+subword=4
+epoch=0
+window=20
 min=2
 dim=300
 
 OPTIND=1
 
-while getopts "c:p:s:e:w:m:d:" opt; do
+while getopts "c:p:s:e:w:m:d:o:" opt; do
     case "$opt" in
     c)  collection=$OPTARG
         ;;
@@ -30,6 +32,8 @@ while getopts "c:p:s:e:w:m:d:" opt; do
         ;;
     d)  dim=$OPTARG
         ;;
+    o)  output_dir=$OPTARG
+        ;;
     esac
 done
 
@@ -43,21 +47,46 @@ if [ -z "${collection}" ]; then
     echo "Collection (-c) is required!"
     exit 1
 fi
+
+output_suffix=""
+if [ "$epoch" -eq "0" ]; then
+    if [ -n "${pretrained}" ]; then
+        epoch=5
+    elif [ "${collection}" == "adi" ]; then
+        epoch=40
+    else
+        epoch=20
+    fi
+else
+    output_suffix="${output_suffix}-epochs-${epoch}"
+fi
+
 training_file=${training_dir}/${collection}.txt
 
-output_suffix="${collection}"
+output_file="${collection}"
 if [ -n "${pretrained}" ]; then
-    output_suffix="${output_suffix}-${pretrained}"
+    output_file="${output_file}-${pretrained%.*}"
 else
-    output_suffix="${output_suffix}-only"
+    output_file="${output_file}-only"
 fi
-output_suffix="${output_suffix}-sub-${subword}-win-${window}"
-output_file=${output_dir}/${output_suffix}
+output_file="${output_file}-sub-${subword}-win-${window}${output_suffix}"
+output_path="${output_dir}/${output_file}"
 
-if [ "${pretrained}" == "pubmed" ]; then
+if [ "${pretrained}" == "pubmed.vec" ]; then
   dim=200
 fi
 
-echo "Training to ${output_file}"
+echo "Training to ${output_path}"
 
-${fasttext} skipgram -input ${training_file} -output ${output_file} -dim ${dim} -epoch ${epoch} -minCount ${min} -minn ${subword} -ws ${window}
+additional_params=""
+if [ -n "${pretrained}" ]; then
+    additional_params="${additional_params} -pretrainedVectors ${embed_dir}/${pretrained}"
+fi
+
+cmd="${fasttext} skipgram -input ${training_file} -output ${output_path} -dim ${dim} -epoch ${epoch} -minCount ${min} -minn ${subword} -ws ${window} ${additional_params}"
+
+echo "${cmd}"
+
+${cmd}
+
+

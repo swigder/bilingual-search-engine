@@ -102,7 +102,7 @@ class StandardReader(IrDataReader):
         f = lambda t: os.path.join(data_dir, '{}-{}.txt'.format(name, t))
         super().__init__(name=name,
                          doc_file=f('documents'),
-                         query_file=f('queries_untranslated'),
+                         query_file=f('queries'),
                          relevance_file=f('relevance'),
                          translated_query_file=f('queries_translated'))
         self.extract_doc_id = self.extract_id
@@ -145,6 +145,8 @@ class TimeReader(IrDataReader):
 
     def extract_relevance(self, line):
         query_id, *doc_ids = map(int, line.split())
+        # fix issue with offsets for certain relevance judgements due to missing documents
+        doc_ids = [doc_id - 2 if doc_id >= 417 else doc_id - 1 if doc_id >= 413 else doc_id for doc_id in doc_ids]
         return query_id, doc_ids
 
     def skip_line(self, line):
@@ -216,7 +218,7 @@ class OhsuReader(IrDataReader):
         return False
 
 
-readers = {'time': TimeReader, 'adi': AdiReader, 'ohsu-trec': OhsuReader}
+readers = {'adi': AdiReader, 'time': TimeReader, 'ohsu-trec': OhsuReader}
 
 
 def print_description(items, description):
@@ -294,7 +296,7 @@ if __name__ == "__main__":
     parser.add_argument('dir', type=str, help='Directory with files')
 
     parent_parser = argparse.ArgumentParser(add_help=False)
-    parent_parser.add_argument('-t', '--types', nargs='+', choices=list(readers.keys()) + ['all'], default='all')
+    parent_parser.add_argument('-c', '--collections', nargs='+', choices=list(readers.keys()) + ['all'], default='all')
 
     subparsers = parser.add_subparsers()
 
@@ -316,7 +318,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.types == 'all':
-        args.types = list(readers.keys())
+    if args.collections == 'all':
+        args.collections = list(readers.keys())
 
-    args.func([read_collection(base_dir=args.dir, collection_name=name, standard=args.standard) for name in args.types], args)
+    collections = [read_collection(base_dir=args.dir, collection_name=name, standard=args.standard)
+                   for name in args.collections]
+    args.func(collections, args)
