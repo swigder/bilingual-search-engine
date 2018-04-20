@@ -54,7 +54,7 @@ class SearchEngine:
 class EmbeddingSearchEngine(SearchEngine):
     def __init__(self, dictionary, df_file=None, df_options={}):
         super().__init__(df_file, df_options)
-        
+
         self.dictionary = dictionary
         self.index = AnnoyIndex(dictionary.vector_dimensionality, metric='angular')
         self.documents = []
@@ -69,7 +69,7 @@ class EmbeddingSearchEngine(SearchEngine):
         self._init_word_weights_stopwords(doc_tokens, **self.word_weight_options)
 
         for i, tokens in enumerate(doc_tokens):
-            self.index.add_item(i, self._vectorize(tokens=tokens))
+            self.index.add_item(i, self._vectorize(tokens=tokens, indexing=True))
         self.index.build(n_trees=10)
 
     def query_index(self, query, n_results=5):
@@ -77,10 +77,10 @@ class EmbeddingSearchEngine(SearchEngine):
         results, distances = self.index.get_nns_by_vector(query_vector,
                                                           n=n_results,
                                                           include_distances=True,
-                                                          search_k=10*len(self.documents))
+                                                          search_k=10 * len(self.documents))
         return [(distance, self.documents[result]) for result, distance in zip(results, distances)]
 
-    def _vectorize(self, tokens, indexing=True):
+    def _vectorize(self, tokens, indexing):
         vector = np.zeros((self.dictionary.vector_dimensionality,))
         for token in tokens:
             if token in self.stopwords:
@@ -97,40 +97,18 @@ class EmbeddingSearchEngine(SearchEngine):
 
 
 class BilingualEmbeddingSearchEngine(EmbeddingSearchEngine):
-    def __init__(self, dictionary):
+    def __init__(self, dictionary, doc_lang, query_lang):
         super().__init__(dictionary=dictionary)
+        self.doc_lang = doc_lang
+        self.query_lang = query_lang
 
-    def _vectorize(self, tokens, indexing=False):
+    def _vectorize(self, tokens, indexing):
         if indexing:  # document language, use df
+            # return np.sum(self.dictionary.word_vectors(tokens=tokens, lang=self.doc_lang), axis=0)
             return EmbeddingSearchEngine._vectorize(self, tokens, indexing)
         else:  # query language, df not available
-            return np.sum(self.dictionary.word_vectors(tokens=tokens, reverse=True), axis=0)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Search Engine.')
-
-    parser.add_argument('src_emb_file', type=str, help='File with document embeddings')
-    parser.add_argument('tgt_emb_file', type=str, help='File with query embeddings', default=None)
-
-    args = parser.parse_args()
-
-    if args.tgt_emb_file is None:  # monolingual
-        mono_dict = MonolingualDictionary(args.src_emb_file)
-        search_engine = EmbeddingSearchEngine(dictionary=mono_dict)
-    else:  # bilingual
-        bi_dict = BilingualDictionary(args.src_emb_file, args.tgt_emb_file)
-        search_engine = BilingualEmbeddingSearchEngine(dictionary=bi_dict)
-
-    print('Type each sentence to index, followed by enter. When done, hit enter twice.')
-    sentences = []
-    sentence = input(">> ")
-    while sentence:
-        sentences.append(sentence)
-        sentence = input(">> ")
-    search_engine.index_documents(sentences)
-
-    print('Type your query.')
-    while True:
-        query = input(">> ")
-        print(search_engine.query_index(query))
+            vector = np.sum(self.dictionary.word_vectors(tokens=tokens, lang=self.query_lang), axis=0)
+            oov_tokens = [token for token in tokens if token not in self.dictionary.dictionaries[self.query_lang]]
+            print('OOV', oov_tokens)
+            vector += np.sum(self.dictionary.word_vectors(tokens=oov_tokens, lang=self.doc_lang), axis=0)
+            return vector
