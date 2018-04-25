@@ -4,8 +4,6 @@ import os
 from collections import namedtuple
 
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from numpy import average
 
 from baseline import CosineSimilaritySearchEngine
@@ -269,6 +267,9 @@ def print_table(data, args):
 
 
 def display_chart(data, args):
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
     sns.set()
     data = reorder_columns(data, args)
     for row in data.index:
