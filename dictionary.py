@@ -43,7 +43,7 @@ class FasttextDictionary(MonolingualDictionary):
         return self.emb.get_word_id(token) >= 0
 
     def safe_word_vector(self, token):
-        if self.use_subword or token in self.emb:
+        if self.use_subword or token in self:
             return self.emb.get_word_vector(token)
         else:
             return np.zeros(shape=(self.vector_dimensionality,))
@@ -58,7 +58,7 @@ class FasttextDictionary(MonolingualDictionary):
         return self.emb.get_words(include_freq=True)[1][0]
 
     def word_frequency(self, token):
-        if token not in self.emb:
+        if token not in self:
             return 0
         _, freq = self.emb.get_words(include_freq=True)
         return freq[self.emb.get_word_id(token)]
