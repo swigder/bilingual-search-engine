@@ -94,20 +94,26 @@ class EmbeddingSearchEngine(SearchEngine):
 
 
 class BilingualEmbeddingSearchEngine(EmbeddingSearchEngine):
-    def __init__(self, dictionary, doc_lang, query_lang, use_query_emb_freq=True):
+    def __init__(self, dictionary, doc_lang, query_lang, query_lang_df_file=None):
         super().__init__(dictionary=dictionary)
         self.doc_lang = doc_lang
         self.query_lang = query_lang
-        self.use_query_emb_freq = use_query_emb_freq
+        self.query_lang_weights = None
+        if query_lang_df_file:
+            self.query_lang_weights = defaultdict(int)
+            for line in open(query_lang_df_file):
+                if line:
+                    word, count = line.split()
+                    self.query_lang_weights[word] = count
 
     def _get_query_word_weights(self, tokens):
-        if not self.use_query_emb_freq:
+        if not self.query_lang_weights:
             return np.ones((1, len(tokens)))
         weights = np.zeros((1, len(tokens)))
         query_lang_dictionary = self.dictionary.dictionaries[self.query_lang]
         numerator = query_lang_dictionary.top_word_frequency()
         for i, token in enumerate(tokens):
-            freq = query_lang_dictionary.word_frequency(token)
+            freq = self.query_lang_weights[token]
             if freq > 0:
                 weights[0, i] = log(numerator / freq, 10)
         return weights
