@@ -141,7 +141,7 @@ def bilingual(test):
         query_dict = dictionary(parsed_args.query_embed, parsed_args, 'query')
         bilingual_dictionary = BilingualDictionary(src_dict=doc_dict, tgt_dict=query_dict, default_lang='doc')
 
-        monolingual_search_engine = EmbeddingSearchEngine(dictionary=doc_dict)
+        monolingual_search_engine = CosineSimilaritySearchEngine()
         bilingual_search_engine = BilingualEmbeddingSearchEngine(dictionary=bilingual_dictionary,
                                                                  doc_lang='doc', query_lang='query')
         monolingual_search_engine.index_documents(collection.documents.values())
