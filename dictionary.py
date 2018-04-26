@@ -53,7 +53,6 @@ class FasttextDictionary(MonolingualDictionary):
 
     def synonyms(self, key, topn=1, vector=False):
         raise NotImplementedError()
-        self.emb.most_similar
 
 
 class GensimDictionary(MonolingualDictionary):
@@ -95,7 +94,10 @@ class BilingualDictionary(Dictionary):
     def word_vectors(self, tokens, lang=None):
         lang = lang or self.default_lang
         if lang is 'query':
-            print('Translations:', [(word, self.translate(word, lang)) for word in tokens])
+            try:
+                print('Translations:', [(word, self.translate(word, lang)) for word in tokens])
+            except NotImplementedError:
+                pass
         return self.dictionaries[lang].word_vectors(tokens)
 
     def translate(self, src_word, src_lang, topn=1):
