@@ -54,6 +54,15 @@ class FasttextDictionary(MonolingualDictionary):
     def synonyms(self, key, topn=1, vector=False):
         raise NotImplementedError()
 
+    def top_word_frequency(self):
+        return self.emb.get_words(include_freq=True)[1][0]
+
+    def word_frequency(self, token):
+        if token not in self.emb:
+            return 0
+        _, freq = self.emb.get_words(include_freq=True)
+        return freq[self.emb.get_word_id(token)]
+
 
 class GensimDictionary(MonolingualDictionary):
     def __init__(self, emb_file, language=None):

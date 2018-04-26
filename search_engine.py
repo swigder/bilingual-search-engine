@@ -94,17 +94,31 @@ class EmbeddingSearchEngine(SearchEngine):
 
 
 class BilingualEmbeddingSearchEngine(EmbeddingSearchEngine):
-    def __init__(self, dictionary, doc_lang, query_lang):
+    def __init__(self, dictionary, doc_lang, query_lang, use_query_emb_freq=True):
         super().__init__(dictionary=dictionary)
         self.doc_lang = doc_lang
         self.query_lang = query_lang
+        self.use_query_emb_freq = use_query_emb_freq
+
+    def _get_query_word_weights(self, tokens):
+        if not self.use_query_emb_freq:
+            return np.ones((len(tokens)))
+        weights = np.zeros((len(tokens)))
+        query_lang_dictionary = self.dictionary.dictionaries[self.query_lang]
+        numerator = query_lang_dictionary.top_word_frequency
+        for i, token in enumerate(tokens):
+            freq = query_lang_dictionary.word_frequency(token)
+            if freq > 0:
+                weights[i] = log(numerator / freq, 10)
+        return weights
 
     def _vectorize(self, tokens, indexing):
         if indexing:  # document language, use df
             # return np.sum(self.dictionary.word_vectors(tokens=tokens, lang=self.doc_lang), axis=0)
             return EmbeddingSearchEngine._vectorize(self, tokens, indexing)
         else:  # query language, df not available
-            vector = np.sum(self.dictionary.word_vectors(tokens=tokens, lang=self.query_lang), axis=0)
+            vector = self.dictionary.word_vectors(tokens=tokens, lang=self.query_lang) @ \
+                     self._get_query_word_weights(tokens)
             oov_tokens = [token for token in tokens if token not in self.dictionary.dictionaries[self.query_lang]]
             print('OOV', oov_tokens)
             vector += np.sum(self.dictionary.word_vectors(tokens=oov_tokens, lang=self.doc_lang), axis=0)
