@@ -37,7 +37,7 @@ class Queue:
         return len(self.to_process) == 0 or (self.max_depth and self.depth > self.max_depth)
 
 
-def get_categories(super_category, paging=None):
+def get_categories(super_category, wiki_url, paging=None):
     params = {'action': 'query', 'list': 'categorymembers',
               'cmtitle': super_category,
               'format': 'json', 'cmlimit': 50}
@@ -48,16 +48,16 @@ def get_categories(super_category, paging=None):
     titles = [item['title'] for item in response_json['query']['categorymembers']]
 
     if 'continue' in response_json and 'cmcontinue' in response_json['continue']:
-        titles += get_categories(super_category, paging=response_json['continue']['cmcontinue'])
+        titles += get_categories(super_category, wiki_url=wiki_url, paging=response_json['continue']['cmcontinue'])
 
     return titles
 
 
-def get_categories_recursive(super_category, max_depth=1):
+def get_categories_recursive(super_category, wiki_url, category_prefix, max_depth=1):
     page_titles = set()
     queue = Queue(first_item=super_category, max_depth=max_depth)
     while not queue.empty():
-        titles = get_categories(queue.pop())
+        titles = get_categories(queue.pop(), wiki_url=wiki_url)
         for title in titles:
             if title.startswith(category_prefix):
                 queue.add(title)
@@ -66,7 +66,7 @@ def get_categories_recursive(super_category, max_depth=1):
     return page_titles, queue.processed
 
 
-def get_plain_text(page):
+def get_plain_text(page, wiki_url):
     params = {'action': 'query', 'prop': 'extracts', 'explaintext': '',
               'titles': page, 'format': 'json'}
 
@@ -76,18 +76,7 @@ def get_plain_text(page):
     return plaintext.replace('=', ' ').replace('\n', ' ')
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Get category from wikipedia.')
-
-    parser.add_argument('dir', type=str, help='directory to write to')
-    parser.add_argument('-l', '--lang', choices=['en', 'sv'], default='en', help='language')
-    parser.add_argument('-i', '--ignore', type=str, nargs='?', help='file containing pages to ignore')
-    parser.add_argument('-p', '--pages', type=str, nargs='?', help='file containing pages to read')
-    parser.add_argument('-c', '--category', type=str, nargs='?', help='category')
-    parser.add_argument('-d', '--depth', type=int, default=4, help='depth of category tree to read')
-
-    args = parser.parse_args()
-
+def download_wikipedia(args):
     assert args.category or args.pages
 
     wiki_url = 'https://{}.wikipedia.org/w/api.php'.format(args.lang)
@@ -102,7 +91,8 @@ if __name__ == '__main__':
     print(datetime.datetime.now(), 'Getting categories and pages...')
 
     if not args.pages:
-        pages, categories = get_categories_recursive(category_prefix + args.category, max_depth=4)
+        pages, categories = get_categories_recursive(category_prefix + args.category,
+                                                     wiki_url=wiki_url, category_prefix=category_prefix, max_depth=4)
         print(datetime.datetime.now(), 'Found', len(categories), 'categories and', len(pages), 'pages.')
 
         print(datetime.datetime.now(), 'Writing categories and pages to file...')
@@ -132,6 +122,70 @@ if __name__ == '__main__':
                 print(datetime.datetime.now(), 'Getting page', i, page, '...')
             if page in processed_pages:
                 continue
-            f.write(page + '\n' + get_plain_text(page) + '\n\n')
+            f.write(page + '\n' + get_plain_text(page, wiki_url=wiki_url) + '\n\n')
+
+
+def merge(args):
+    to_pages = []
+    with open(os.path.join(args.to_dir, 'pages.txt'), 'r') as f:
+        for line in f:
+            to_pages.append(line.strip())
+
+    processed_pages = []
+    with open(os.path.join(args.to_dir, 'contents.txt'), 'r') as f:
+        previous_is_blank = True
+        for line in f:
+            line = line.strip()
+            if previous_is_blank and line:
+                processed_pages.append(line)
+            previous_is_blank = not bool(line)
+
+    to_file = os.path.join(args.to_dir, 'contents.txt')
+    if args.new_file:
+        import shutil
+        to_file = args.new_file if os.path.isabs(args.new_file) else os.path.join(args.to_dir, args.new_file)
+        shutil.copy(os.path.join(args.to_dir, 'contents.txt'), to_file)
+
+    with open(to_file, 'a') as to_file:
+        with open(os.path.join(args.from_dir, 'contents.txt'), 'r') as from_file:
+            previous_is_blank = True
+            add_current_line = False
+            for line in from_file:
+                line = line.strip()
+                if previous_is_blank and line not in processed_pages and (args.all or line in to_pages):
+                    to_file.write(line + '\n')
+                    add_current_line = True
+                elif add_current_line:
+                    if line:
+                        to_file.write(line + '\n')
+                    to_file.write('\n')
+                    add_current_line = False
+                previous_is_blank = not bool(line)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Get category from wikipedia.')
+
+    subparsers = parser.add_subparsers()
+
+    parser_download = subparsers.add_parser('dl')
+    parser_download.add_argument('dir', type=str, help='directory to write to')
+    parser_download.add_argument('-l', '--lang', choices=['en', 'sv'], default='en', help='language')
+    parser_download.add_argument('-i', '--ignore', type=str, nargs='?', help='file containing pages to ignore')
+    parser_download.add_argument('-p', '--pages', type=str, nargs='?', help='file containing pages to read')
+    parser_download.add_argument('-c', '--category', type=str, nargs='?', help='category')
+    parser_download.add_argument('-d', '--depth', type=int, default=4, help='depth of category tree to read')
+    parser_download.set_defaults(func=download_wikipedia)
+
+    parser_merge = subparsers.add_parser('merge')
+    parser_merge.add_argument('to_dir', type=str, help='directory to merge into')
+    parser_merge.add_argument('from_dir', type=str, help='directory to merge from')
+    parser_merge.add_argument('-n', '--new_file', type=str, default='', help='new file for merged items')
+    parser_merge.add_argument('-a', '--all', action='store_true')
+    parser_merge.set_defaults(func=merge)
+
+    args = parser.parse_args()
+
+    args.func(args)
 
 
