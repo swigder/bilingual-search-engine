@@ -1,5 +1,4 @@
 import copy
-import datetime
 import glob
 import os
 from collections import namedtuple
@@ -8,7 +7,7 @@ import pandas as pd
 from numpy import average
 
 from baseline import CosineSimilaritySearchEngine
-from dictionary import dictionary, BilingualDictionary
+from dictionary import dictionary
 from search_engine import EmbeddingSearchEngine, BilingualEmbeddingSearchEngine
 from .run_tests import query_result, f1_score, average_precision
 
@@ -126,48 +125,6 @@ def split_collections(f):
     return lambda cs, a: (f(c, a) for c in cs)
 
 
-def bilingual(test):
-    def inner(collections, parsed_args):
-        if len(collections) != 1:
-            raise ValueError
-        collection = collections[0]
-
-        doc_dict = dictionary(parsed_args.doc_embed, language='doc',
-                              use_subword=parsed_args.subword, normalize=parsed_args.normalize)
-        query_dict = dictionary(parsed_args.query_embed, language='query',
-                                use_subword=parsed_args.subword, normalize=parsed_args.normalize)
-        bilingual_dictionary = BilingualDictionary(src_dict=doc_dict, tgt_dict=query_dict, default_lang='doc')
-
-        monolingual_search_engine = EmbeddingSearchEngine(dictionary=doc_dict)
-        bilingual_search_engine = BilingualEmbeddingSearchEngine(dictionary=bilingual_dictionary,
-                                                                 doc_lang='doc', query_lang='query')
-        monolingual_search_engine.index_documents(collection.documents.values())
-        bilingual_search_engine.index_documents(collection.documents.values())
-
-        doc_ids = {doc_text: doc_id for doc_id, doc_text in collection.documents.items()}
-
-        total_average_precision_original = 0
-        total_average_precision_translated = 0
-
-        for i, query in collection.queries_translated.items():
-            expected = collection.relevance[i]
-            total_average_precision_original += query_result(monolingual_search_engine, i, collection.queries[i],
-                                                             expected, doc_ids, 10,
-                                                             verbose=True,
-                                                             metric=average_precision)
-            total_average_precision_translated += query_result(bilingual_search_engine, i, query,
-                                                               expected, doc_ids, 10,
-                                                               verbose=True,
-                                                               metric=average_precision)
-
-        count = len(collection.queries_translated)
-
-        print('\n-- Totals:')
-        print('-- MAP original: {:.4f}, MAP translated: {:.4f}'.format(total_average_precision_original / count,
-                                                                       total_average_precision_translated / count))
-    return inner
-
-
 '''
 Search test - precision / recall.
 '''
@@ -190,7 +147,9 @@ def search_test_pr(collection, search_engine):
 def search_test_map(collection, search_engine):
     total_average_precision = 0
     doc_ids = {doc_text: doc_id for doc_id, doc_text in collection.documents.items()}
-    for i, query in collection.queries.items():
+    queries = collection.queries.items() if type(search_engine) is not BilingualEmbeddingSearchEngine \
+        else collection.queries_translated.items()
+    for i, query in queries:
         expected = collection.relevance[i]
         total_average_precision += query_result(search_engine, i, query, expected, doc_ids, 10,
                                                 verbose=False,
@@ -229,71 +188,3 @@ def recall_test_f(collection, search_engine):
 recall_test = EmbeddingsTest(f=recall_test_f,
                              columns=['Max dist (avg)', 'Max dist (max)', 'Max rank (avg)', 'Max rank (max)'],
                              non_embed='baseline')
-
-
-'''
-Print result
-'''
-
-
-def reorder_columns(df, parsed_args):
-    if parsed_args.column_order:
-        try:
-            return df[df.columns[list(map(int, list(parsed_args.column_order)))]]
-        except:
-            print('Unable to rearrange columns!')  # don't want to fail just cuz we can't rearrange columns
-            return df
-    else:
-        cols = df.columns.tolist()
-        try:
-            cols = list(map(str, sorted(map(int, cols))))
-        except ValueError:
-            cols = sorted(cols)
-        except TypeError:
-            pass
-        return df[cols]
-
-
-def combine_multirun(results, grouping=True):
-    if type(results) is not list:
-        return results
-    concat_results = pd.concat(results)
-    return concat_results.astype(float).groupby(concat_results.index).mean() if grouping else concat_results
-
-
-def print_table(data, args):
-    data = combine_multirun(data)
-    data = reorder_columns(data, args)
-    pd.set_option('precision', args.precision)
-    if args.latex:
-        print(data.to_latex())
-    else:
-        print(data)
-
-
-def display_chart(data, args):
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-    sns.set()
-    data = combine_multirun(data)
-    data = reorder_columns(data, args)
-    for row in data.index:
-        plt.plot(data.loc[row], label=row)
-    plt.legend()
-    plt.xlabel(args.x_axis)
-    plt.ylabel(args.y_axis or args.column)
-    plt.title(args.title)
-    plt.show()
-
-
-def save_to_file(data, args):
-    data = combine_multirun(data, grouping=False)
-    save_file = args.save_file
-    if not save_file:
-        save_dir = os.path.join(os.getcwd(), 'output')
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        save_file = os.path.join(save_dir, datetime.datetime.now().isoformat() + ".pkl")
-    print('Saving to file', save_file)
-    data.to_pickle(save_file)

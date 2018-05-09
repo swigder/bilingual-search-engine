@@ -2,8 +2,9 @@ import argparse
 
 from .df_tests import vary_df, add_df_parser_options
 from .oov_tests import oov_test
-from .testing_framework import vary_embeddings, search_test, embed_to_engine, print_table, display_chart, bilingual, \
-    hyperparameters, multirun_map, recall_test, save_to_file
+from .testing_framework import vary_embeddings, search_test, embed_to_engine, hyperparameters, multirun_map, recall_test
+from .bilingual_tests import bilingual
+from .testing_io import print_table, display_chart, save_to_file
 from ir_data_reader import readers, read_collection
 
 
@@ -58,8 +59,10 @@ add_df_parser_options(df_parser)
 df_parser.set_defaults(func=vary_df(search_test))
 
 bilingual_parser = subparsers.add_parser('bilingual', parents=[parent_parser])
-bilingual_parser.add_argument('-de', '--doc_embed', type=str, help='Document-language embedding location')
-bilingual_parser.add_argument('-qe', '--query_embed', type=str, help='Query-language embedding location')
+bilingual_parser.add_argument('-le', '--embed_locations', type=str, nargs='+', help='Embedding directory')
+bilingual_parser.add_argument('-de', '--doc_embed', type=str, help='Document-language embedding file')
+bilingual_parser.add_argument('-qe', '--query_embed', type=str, help='Query-language embedding file')
+bilingual_parser.add_argument('--search', action='store_true', help='Search for subdirectories containing embeddings')
 bilingual_parser.set_defaults(func=bilingual(search_test))
 
 
