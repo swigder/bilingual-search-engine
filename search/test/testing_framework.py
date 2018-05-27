@@ -168,14 +168,18 @@ def search_test_map(collection, search_engine):
     doc_ids = {doc_text: doc_id for doc_id, doc_text in collection.documents.items()}
     queries = collection.queries.items() if type(search_engine) is not BilingualEmbeddingSearchEngine \
         else collection.queries_translated.items()
+    empty = 0
     for i, query in queries:
+        if i not in collection.relevance:
+            empty += 1
+            continue
         expected = collection.relevance[i]
         precision = query_result(search_engine, i, query, expected, doc_ids, 10,
                                  verbose=False,
                                  metric=average_precision)
         print_with_time("{} {}".format(i, precision))
         total_average_precision += precision
-    return total_average_precision / len(queries)
+    return total_average_precision / (len(queries) - empty)
 
 
 search_test = EmbeddingsTest(f=search_test_map, columns=['MAP@10'], non_embed='baseline')
