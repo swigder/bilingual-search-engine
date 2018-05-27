@@ -178,13 +178,68 @@ class AdiReader(IrDataReader):
         return line.startswith('.') and not line.startswith('.I')
 
 
+class NplReader(IrDataReader):
+    def __init__(self, data_dir, name):
+        f = dir_appender(data_dir)
+        super().__init__(name=name, doc_file=f('doc-text'), query_file=f('query-text'), relevance_file=f('rlv-ass'))
+        self.new_item = True
+
+    def _read_file(self, file, extract_id_fn):
+        self.new_item = True
+        return super()._read_file(file, extract_id_fn)
+
+    def extract_id(self, line):
+        if not self.new_item:
+            return None
+        self.new_item = False
+        return int(line)
+
+    def extract_doc_id(self, line):
+        return self.extract_id(line)
+
+    def extract_query_id(self, line):
+        return self.extract_id(line)
+
+    def read_relevance_judgments(self):
+        items = OrderedDict()
+        with open(self.relevance_file) as f:
+            self.new_item = True
+            query_id = None
+            for line in f:
+                line = line.strip()
+                if not line or self.skip_line(line):
+                    continue
+                if self.new_item:
+                    self.new_item = False
+                    query_id = int(line)
+                    items[query_id] = []
+                else:
+                    items[query_id] += map(int, line.split())
+        return items
+
+    def skip_line(self, line):
+        if line == '/':
+            self.new_item = True
+            return True
+        return False
+
+
 class OhsuReader(IrDataReader):
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, name):
+        if os.path.basename(data_dir) == 'ohsu-test':
+            data_dir = os.path.join(os.path.dirname(data_dir), 'ohsu-trec')
         f = dir_appender(os.path.join(data_dir, 'trec9-train'))
-        super().__init__(name='ohsu-trec',
-                         doc_file=f('ohsumed.87'),
-                         query_file=f('query.ohsu.1-63'),
-                         relevance_file=f('qrels.ohsu.batch.87'))
+        if name == 'ohsu-trec':
+            super().__init__(name=name,
+                             doc_file=f('ohsumed.87'),
+                             query_file=f('query.ohsu.1-63'),
+                             relevance_file=f('qrels.ohsu.batch.87'))
+        elif name == 'ohsu-test':
+            f_test = dir_appender(os.path.join(data_dir, 'trec9-test'))
+            super().__init__(name=name,
+                             doc_file=f_test('ohsumed.88-91'),
+                             query_file=f('query.ohsu.1-63'),
+                             relevance_file=f_test('qrels.ohsu.88-91'))
         self.previous_line_marker = None
 
     def extract_doc_id(self, line):
@@ -319,7 +374,8 @@ class FireReader(IrDataReader):
                             relevance=relevance_judgements)
 
 
-readers = {'adi': AdiReader, 'time': TimeReader, 'ohsu-trec': OhsuReader, 'cacm': MedCacmReader, 'med': MedCacmReader}
+readers = {'adi': AdiReader, 'time': TimeReader, 'ohsu-trec': OhsuReader, 'ohsu-test': OhsuReader, 'med': MedCacmReader,
+           'npl': NplReader, 'cacm': MedCacmReader}
 
 
 def print_description(items, description):
