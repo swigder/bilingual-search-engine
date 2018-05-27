@@ -218,10 +218,15 @@ class OhsuReader(IrDataReader):
         return False
 
 
-class CacmReader(IrDataReader):
+class MedCacmReader(IrDataReader):
     def __init__(self, data_dir, name):
         f = dir_appender(data_dir)
-        super().__init__(name=name, doc_file=f('cacm.all'), query_file=f('query.text'), relevance_file=f('qrels.text'))
+        if name == 'cacm':
+            super().__init__(name=name, doc_file=f('cacm.all'),
+                             query_file=f('query.text'), relevance_file=f('qrels.text'))
+        elif name == 'med':
+            super().__init__(name=name, doc_file=f('MED.ALL'),
+                             query_file=f('MED.QRY'), relevance_file=f('MED.REL'))
         self.previous_line_marker = None
 
     @staticmethod
@@ -237,7 +242,7 @@ class CacmReader(IrDataReader):
         return self.extract_id(line)
 
     def extract_relevance(self, line):
-        query_id, doc_id = line.split()[0:2]
+        query_id, doc_id = line.split()[0:2] if self.name == 'cacm' else (line.split()[0], line.split()[2])
         return query_id, [int(doc_id)]
 
     def extract_line(self, line):
@@ -314,7 +319,7 @@ class FireReader(IrDataReader):
                             relevance=relevance_judgements)
 
 
-readers = {'adi': AdiReader, 'time': TimeReader, 'ohsu-trec': OhsuReader, 'cacm': CacmReader}
+readers = {'adi': AdiReader, 'time': TimeReader, 'ohsu-trec': OhsuReader, 'cacm': MedCacmReader, 'med': MedCacmReader}
 
 
 def print_description(items, description):
