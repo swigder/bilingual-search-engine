@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from .testing_framework import EmbeddingsTest
 from tools.text_tools import tokenize, normalize
 
@@ -13,11 +15,12 @@ def oov_rate(iv, oov):
     return len(oov) / (len(iv) + len(oov))
 
 
-def texts_to_tokens(texts):
-    tokens = []
+def texts_to_tokens(texts, min_count=1):
+    tokens = defaultdict(int)
     for text in texts:
-        tokens += tokenize(normalize(text))
-    return tokens
+        for token in tokenize(normalize(text)):
+            tokens[token] += 1
+    return [token for token, count in tokens.items() if count >= min_count]
 
 
 def oov_details(tokens, vocabulary):
@@ -34,10 +37,10 @@ def oov_details(tokens, vocabulary):
 
 
 def oov_test_f(collection, embed):
-    query_tokens = texts_to_tokens(collection.queries.values())
+    query_tokens = texts_to_tokens(collection.queries.values(), min_count=1)
 
     if embed is None:
-        document_tokens = texts_to_tokens(collection.documents.values())
+        document_tokens = texts_to_tokens(collection.documents.values(), min_count=2)
         return oov_details(tokens=query_tokens, vocabulary=set(document_tokens))
     else:
         return oov_details(tokens=query_tokens, vocabulary=embed)
